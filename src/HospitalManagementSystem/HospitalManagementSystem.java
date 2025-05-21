@@ -2,24 +2,30 @@ package HospitalManagementSystem;
 
 import java.sql.*;
 import java.util.Scanner;
+import java.util.Properties;
+import java.io.InputStream;
+import java.io.IOException;
 
 public class HospitalManagementSystem {
-    private static final String url = "jdbc:mysql://localhost:3306/hospital";
-    private static final String username = "root";
-    private static final String password = "password";
+    private static String url;
+    private static String username;
+    private static String password;
 
     public static void main(String[] args) {
-        try{
+        loadConfig();  // Load DB config from properties file
+
+        try {
             Class.forName("com.mysql.cj.jdbc.Driver");
-        }catch (ClassNotFoundException e){
+        } catch (ClassNotFoundException e) {
             e.printStackTrace();
         }
+
         Scanner scanner = new Scanner(System.in);
-        try{
-            Connection connection = DriverManager.getConnection(url, username, password);
+        try (Connection connection = DriverManager.getConnection(url, username, password)) {
             Patient patient = new Patient(connection, scanner);
             Doctor doctor = new Doctor(connection);
-            while(true){
+
+            while (true) {
                 System.out.println("HOSPITAL MANAGEMENT SYSTEM ");
                 System.out.println("1. Add Patient");
                 System.out.println("2. View Patients");
@@ -29,7 +35,7 @@ public class HospitalManagementSystem {
                 System.out.println("Enter your choice: ");
                 int choice = scanner.nextInt();
 
-                switch(choice){
+                switch (choice) {
                     case 1:
                         // Add Patient
                         patient.addPatient();
@@ -57,24 +63,41 @@ public class HospitalManagementSystem {
                         System.out.println("Enter valid choice!!!");
                         break;
                 }
-
             }
-
-        }catch (SQLException e){
+        } catch (SQLException e) {
             e.printStackTrace();
         }
     }
 
+    private static void loadConfig() {
+        Properties properties = new Properties();
+        try (InputStream input = HospitalManagementSystem.class.getClassLoader().getResourceAsStream("config.properties")) {
+            if (input == null) {
+                System.out.println("Sorry, unable to find config.properties");
+                return;
+            }
+            // load a properties file from class path
+            properties.load(input);
 
-    public static void bookAppointment(Patient patient, Doctor doctor, Connection connection, Scanner scanner){
+            // get the property values
+            url = properties.getProperty("db.url");
+            username = properties.getProperty("db.username");
+            password = properties.getProperty("db.password");
+
+        } catch (IOException ex) {
+            ex.printStackTrace();
+        }
+    }
+
+    public static void bookAppointment(Patient patient, Doctor doctor, Connection connection, Scanner scanner) {
         System.out.print("Enter Patient Id: ");
         int patientId = scanner.nextInt();
         System.out.print("Enter Doctor Id: ");
         int doctorId = scanner.nextInt();
         System.out.print("Enter appointment date (YYYY-MM-DD): ");
         String appointmentDate = scanner.next();
-        if(patient.getPatientById(patientId) && doctor.getDoctorById(doctorId)){
-            if(checkDoctorAvailability(doctorId, appointmentDate, connection)){
+        if (patient.getPatientById(patientId) && doctor.getDoctorById(doctorId)) {
+            if (checkDoctorAvailability(doctorId, appointmentDate, connection)) {
                 String appointmentQuery = "INSERT INTO appointments(patient_id, doctor_id, appointment_date) VALUES(?, ?, ?)";
                 try {
                     PreparedStatement preparedStatement = connection.prepareStatement(appointmentQuery);
@@ -82,38 +105,34 @@ public class HospitalManagementSystem {
                     preparedStatement.setInt(2, doctorId);
                     preparedStatement.setString(3, appointmentDate);
                     int rowsAffected = preparedStatement.executeUpdate();
-                    if(rowsAffected>0){
+                    if (rowsAffected > 0) {
                         System.out.println("Appointment Booked!");
-                    }else{
+                    } else {
                         System.out.println("Failed to Book Appointment!");
                     }
-                }catch (SQLException e){
+                } catch (SQLException e) {
                     e.printStackTrace();
                 }
-            }else{
+            } else {
                 System.out.println("Doctor not available on this date!!");
             }
-        }else{
+        } else {
             System.out.println("Either doctor or patient doesn't exist!!!");
         }
     }
 
-    public static boolean checkDoctorAvailability(int doctorId, String appointmentDate, Connection connection){
+    public static boolean checkDoctorAvailability(int doctorId, String appointmentDate, Connection connection) {
         String query = "SELECT COUNT(*) FROM appointments WHERE doctor_id = ? AND appointment_date = ?";
-        try{
+        try {
             PreparedStatement preparedStatement = connection.prepareStatement(query);
             preparedStatement.setInt(1, doctorId);
             preparedStatement.setString(2, appointmentDate);
             ResultSet resultSet = preparedStatement.executeQuery();
-            if(resultSet.next()){
+            if (resultSet.next()) {
                 int count = resultSet.getInt(1);
-                if(count==0){
-                    return true;
-                }else{
-                    return false;
-                }
+                return count == 0;
             }
-        } catch (SQLException e){
+        } catch (SQLException e) {
             e.printStackTrace();
         }
         return false;
